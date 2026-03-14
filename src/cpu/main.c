@@ -26,6 +26,7 @@ int main(int argc, char **argv){
 
     float testing_loss;
     StartTimer();
+    prep_dataset(&testing, 0);
 
     // Testing
     for (int i = 0; i < num_epoch; i++) {

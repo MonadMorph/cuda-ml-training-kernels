@@ -45,7 +45,12 @@ If optional arguments are not provided, the following defaults are used:
 mode 0: 7.67    accuracy: 93.67%
 mode 1: 3.66    accuracy: 93.65%
 mode 2: 1.24    accuracy: 93.6%
-torch: 0.335    accuracy: 94.98%
+
+
+mode 11:    0.201 acc: 94.11%
+mode 11 stocastic 0.327 acc: 94.11%
+mode 12:    0.225 acc: 94.05%
+mode 12 stocastic 0.343 acc: 94.11%
 
 
 ## Project Structure

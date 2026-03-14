@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int MAX_PRINT = 50;
-
 struct timeval timerStart;
 
 void StartTimer(){

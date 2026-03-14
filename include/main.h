@@ -4,6 +4,8 @@
 #include "tensor.h"
 #include "layer.h"
 
+#define MAX_PRINT 50
+
 #ifdef __cplusplus
 extern "C" {
 #endif

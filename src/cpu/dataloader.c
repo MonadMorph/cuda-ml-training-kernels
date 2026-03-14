@@ -88,14 +88,11 @@ void prep_dataset_cpu(MNISTSet* dataset, int shuffle) {
 }
 
 void pack_batch_data_cpu(Tensor* batch, MNISTSet dataset, int start) {
+    float* batch_data = batch->data;
+    int stride = dataset.data_size;
     int batch_size = batch->shape[0];
-    int stride = batch->shape[1];
 
     for (int i = 0; i < batch_size; i++) {
-        int idx = (start + i) % dataset.N;
-        if (dataset.position) {
-            idx = dataset.position[idx];
-        }
-        memcpy(&batch->data[i * stride], &dataset.X[idx * 784], sizeof(float) * 784);
+        memcpy(batch_data + i * stride, dataset.X + dataset.position[i+start] * stride, stride * sizeof(float));
     }
 }

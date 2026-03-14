@@ -66,12 +66,14 @@ static void model_backward(Model *m, Cache cache, int* gt, float lr) {
     mat_op.update_weight(D1, cache.A0, lr, &m->W1);
     mat_op.update_weight(D2, cache.A1, lr, &m->W2);
     mat_op.update_weight(D3, cache.A2, lr, &m->W3);
-    t_op.merged_update_bias(D1, D2, D3, lr, &m->b1);
-
+    t_op.update_bias(D1, lr, &m->b1);
+    t_op.update_bias(D2, lr, &m->b2);
+    t_op.update_bias(D3, lr, &m->b3);
+    
     // free cache
     free_cache(&cache);
-    t_op.free_tensor(&D2);
-    t_op.free_tensor(&D1);
+    //t_op.free_tensor(&D2);
+    //t_op.free_tensor(&D1);
 }
 
 float train_one_epoch(Model*m, MNISTSet dataset, float lr, int batch_size, int stochastic) {
@@ -110,8 +112,8 @@ float accuracy_testing(Model*m, MNISTSet dataset, int batch_size, float* testing
         A0.data = dataset.X + i*dataset.data_size;
 
         Cache cache = model_forward (m, A0);
-        total_num_correct += greedy_accuracy(cache.P, dataset.y + i);
-        *testing_loss += t_op.cross_entropy_loss(cache.P, dataset.y + i);
+        total_num_correct += greedy_accuracy(cache.P, dataset.y_rand + i);
+        *testing_loss += t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
         free_cache(&cache);
     }
     *testing_loss /= (float) dataset.N;
