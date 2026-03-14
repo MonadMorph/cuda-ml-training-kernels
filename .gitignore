@@ -1,0 +1,21 @@
+# dataset
+data/
+
+# Virtual envs
+torch_poc/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local outputs/artifacts (common)
+outputs/
+checkpoints/
+wandb/
+mlruns/
+
+.github/
+test
