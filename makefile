@@ -1,15 +1,20 @@
-CC = gcc
+CC = gcc-15
 NVCC = nvcc
+PKG_CONFIG ?= pkg-config
 
-# Allow overriding OpenBLAS path via environment variables (useful on different systems)
-OPENBLAS_INCLUDE ?= /usr/include/x86_64-linux-gnu
-OPENBLAS_LIB ?= /usr/lib/x86_64-linux-gnu
+# Detect OS for OpenMP linking
+UNAME := $(shell uname)
 
-CFLAGS = -Wall -Wextra -O3 -fopenmp -ffast-math -Iinclude -I$(OPENBLAS_INCLUDE)
-NVFLAGS = -O3 --use_fast_math -Xcompiler="-fopenmp -Wall -Wextra -Iinclude"
-LDFLAGS = -L$(OPENBLAS_LIB) -lopenblas -lgomp -lpthread -lm
+# OpenBLAS flags via pkg-config, with path for macOS
+OPENBLAS_CFLAGS := $(shell PKG_CONFIG_PATH="$(shell brew --prefix openblas 2>/dev/null)/lib/pkgconfig:$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --cflags openblas 2>/dev/null)
+OPENBLAS_LDFLAGS := $(shell PKG_CONFIG_PATH="$(shell brew --prefix openblas 2>/dev/null)/lib/pkgconfig:$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --libs openblas 2>/dev/null)
+
+CFLAGS = -Wall -Wextra -O3 -fopenmp -ffast-math -Iinclude $(OPENBLAS_CFLAGS)
+NVFLAGS = -O3 --use_fast_math -Iinclude
+# -fopenmp is required at link time on GCC to pull in libgomp
+LDFLAGS = $(OPENBLAS_LDFLAGS) -fopenmp
 CUDA_LDFLAGS = -lcublas
-CUDA_ARCH = -gencode arch=compute_89,code=sm_89 # Try to use a100
+CUDA_ARCH = -gencode arch=compute_89,code=sm_89 # Try to use 4090
 
 C_SRCS_BASE := $(filter-out src/cpu/util.c, $(wildcard src/cpu/*.c))
 CU_SRCS_BASE := $(filter-out src/cuda/util.cu, $(wildcard src/cuda/*.cu))
@@ -37,5 +42,3 @@ clean:
 
 # To build CPU only: make cpu
 # To build with CUDA: make
-
-# sinteractive --partition=gpu --account=mpcs51087 --gres=gpu:1 --time=00:15:00 --constraint=v100
