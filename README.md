@@ -53,7 +53,7 @@ The goal of the project is to explore low-level performance engineering in machi
 Basic usage:
 
 ```
-./test <mode> [batch_size] [num_epoch] [lr] [stochastic]
+./test <mode> [stochastic] [num_epoch] [lr] [batch_size]
 ```
 
 ### Modes

@@ -115,7 +115,7 @@ float train_one_epoch(Model*m, MNISTSet dataset, float lr, int batch_size, int s
             A0.data = dataset.X + i*dataset.data_size;
         }
 
-        init_cache(&cache, batch_size, A0);
+        init_cache(&cache, batch, A0);
         model_forward(m, &cache);
         loss += t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
         model_backward(m, cache, dataset.y_rand + i, lr);
@@ -137,7 +137,7 @@ float accuracy_testing(Model*m, MNISTSet dataset, int batch_size, float* testing
 
         Tensor A0 = (Tensor){.ndim = 2, .shape = {batch, dataset.data_size}, .size = batch * dataset.data_size};
         A0.data = dataset.X + i*dataset.data_size;
-        init_cache(&cache, batch_size, A0);
+        init_cache(&cache, batch, A0);
 
         model_forward(m, &cache);
         total_num_correct += greedy_accuracy(cache.P, dataset.y_rand + i);
