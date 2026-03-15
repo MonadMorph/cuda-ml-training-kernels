@@ -39,9 +39,6 @@ void linear_layer_forward_cublas (Tensor input, Tensor weight, Tensor bias, Tens
     const int J = weight.shape[0];     // weight outer dim (out)
     const int K = input.shape[1];      // "hot dimension" (in)
 
-    *output = (Tensor){.data = NULL, .ndim = 2, .shape = {I, J}, .size = I * J};
-    init_tensor_cuda(output);
-
     // This is always true
     const int out_stride = output->shape[1];
     const int in_stride  = input.shape[1];
@@ -81,9 +78,6 @@ void relu_layer_backward_cublas(Tensor input, Tensor weight, Tensor cur_logits, 
     const int I = input.shape[0];      // input outer dim (batch)
     const int J = weight.shape[1];     // weight outer dim (in)
     const int K = input.shape[1];      // "hot dimension" (out)
-
-    *output = (Tensor){.data = NULL, .ndim = 2, .shape = {I, J}, .size = I * J};
-    init_tensor_cuda(output);
 
     // This is always true
     const int out_stride = output->shape[1];

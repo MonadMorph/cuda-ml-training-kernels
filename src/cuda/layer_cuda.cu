@@ -50,9 +50,6 @@ void linear_layer_forward_cuda (Tensor input, Tensor weight, Tensor bias, Tensor
     const int J = weight.shape[0];     // weight outer dim (out)
     const int K = input.shape[1];      // "hot dimension" (in)
 
-    *output = (Tensor){.data = NULL, .ndim = 2, .shape = {I, J}, .size = I * J};
-    init_tensor_cuda(output);
-
     dim3 block(TILE, TILE); // ptb
     dim3 grid((J + TILE - 1) / TILE, (I + TILE - 1) / TILE); // nblocks
 
@@ -101,9 +98,6 @@ void relu_layer_backward_cuda(Tensor input, Tensor weight, Tensor cur_logits, Te
     const int I = input.shape[0];      // input outer dim (batch)
     const int J = weight.shape[1];     // weight outer dim (in)
     const int K = input.shape[1];      // "hot dimension" (out)
-
-    *output = (Tensor){.data = NULL, .ndim = 2, .shape = {I, J}, .size = I * J};
-    init_tensor_cuda(output);
 
     dim3 block(TILE, TILE); // ptb
     dim3 grid((J + TILE - 1) / TILE, (I + TILE - 1) / TILE); // nblocks

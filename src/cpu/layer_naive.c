@@ -6,10 +6,6 @@
 void linear_layer_forward(Tensor input, Tensor weight, Tensor bias, Tensor* output, int do_relu) {
 
     int input_transposed = 0, weight_transposed = 1;
-
-    //This is the hard part, I am doing input*weight, because output dimension is easier to track. I am using row major matrix, so if input is not transposed while output is transposed, we are in the sweet spot.
-    *output = (Tensor){.ndim = 2, .shape = {input.shape[input_transposed], weight.shape[!weight_transposed]}, .size = input.shape[input_transposed] * weight.shape[!weight_transposed]};
-    init_tensor(output); 
     
     int out_stride = output->shape[1];
     int in_stride = input.shape[1];
@@ -37,9 +33,6 @@ void linear_layer_forward(Tensor input, Tensor weight, Tensor bias, Tensor* outp
 
 void relu_layer_backward(Tensor input, Tensor weight, Tensor cur_logits, Tensor* output) {
     int input_transposed = 0, weight_transposed = 0;
-
-    *output = (Tensor){.ndim = 2, .shape = {input.shape[input_transposed], weight.shape[!weight_transposed]}, .size = input.shape[input_transposed] * weight.shape[!weight_transposed]};
-    init_tensor(output); 
     
     int out_stride = output->shape[1];
     int in_stride = input.shape[1];

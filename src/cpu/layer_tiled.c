@@ -8,9 +8,6 @@ void linear_layer_forward_tiled(Tensor input, Tensor weight, Tensor bias, Tensor
     const int J = weight.shape[0];     // weight outer dim (out)
     const int K = input.shape[1];      // "hot dimension" (in)
 
-    *output = (Tensor){ .ndim = 2, .shape = {I, J}, .size = I * J};
-    init_tensor(output);
-
     // This is always true
     const int out_stride = output->shape[1];
     const int in_stride  = input.shape[1];
@@ -93,6 +90,12 @@ void relu_layer_backward_tiled(Tensor input, Tensor weight, Tensor cur_logits, T
         for (int j0 = 0; j0 < J; j0 += TJ) {
             const int i_max = (i0 + TI < I) ? (i0 + TI) : I;
             const int j_max = (j0 + TJ < J) ? (j0 + TJ) : J;
+
+            // Initialize this output tile with 0
+            for (int i = i0; i < i_max; i++) {
+                float *out_row = output->data + i * out_stride;
+                for (int j = j0; j < j_max; j++) out_row[j] = 0;
+            }
 
             // Accumulate over K in TK chunks.
             for (int k0 = 0; k0 < K; k0 += TK) {

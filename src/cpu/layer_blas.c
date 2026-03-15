@@ -17,9 +17,6 @@ void linear_layer_forward_blas(Tensor input, Tensor weight, Tensor bias, Tensor*
     const int J = weight.shape[0];     // weight outer dim (out)
     const int K = input.shape[1];      // "hot dimension" (in)
 
-    *output = (Tensor){ .ndim = 2, .shape = {II, J}, .size = II * J};
-    init_tensor_from(output, bias); // Blas cannot do broadcasting
-
     // This is always true
     const int out_stride = output->shape[1];
     const int in_stride  = input.shape[1];
@@ -28,14 +25,16 @@ void linear_layer_forward_blas(Tensor input, Tensor weight, Tensor bias, Tensor*
     cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans,
         II, J, K,
         1.0f, input.data, in_stride,
-        weight.data, weight_stride, 1.0f,
+        weight.data, weight_stride, 0.0f,
         output->data, out_stride);
 
-    // do relu
-    if (do_relu) {
-        float* data = output->data;
-        //#pragma omp parallel for
-        for (int i = 0; i < output->size; i++) data[i] = data[i] > 0 ? data[i] : 0;
+    // add bias and do relu
+    float* data = output->data;
+    int stride = bias.size;
+    //#pragma omp parallel for
+    for (int i = 0; i < output->size; i++) {
+        float acc = data[i] + bias.data[i%stride];
+        data[i] = do_relu ? (acc > 0 ? acc : 0) : acc;
     }
 }
 
@@ -44,9 +43,6 @@ void relu_layer_backward_blas(Tensor input, Tensor weight, Tensor cur_logits, Te
     const int II = input.shape[0];      // input outer dim (batch)
     const int J = weight.shape[1];     // weight outer dim (in)
     const int K = input.shape[1];      // "hot dimension" (out)
-
-    *output = (Tensor){ .ndim = 2, .shape = {II, J}, .size = II * J};
-    init_tensor(output);
 
     // This is always true
     const int out_stride = output->shape[1];
