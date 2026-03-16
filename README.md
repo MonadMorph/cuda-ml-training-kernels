@@ -31,8 +31,8 @@ The goal of the project is to explore low-level performance engineering in machi
 ## Download OpenBLAS
 
 ### For Ubuntu/Debian
-`sudo apt update`
-`sudo apt install libopenblas-dev pkg-config`
+`apt update`
+`apt install libopenblas-dev pkg-config`
 
 ### For macOS with Homebrew:
 `brew install openblas pkg-config`
@@ -135,10 +135,10 @@ Default parameters:
 
 | Mode | Time (s) | Accuracy |
 |-----|--------|--------|
-| 11 | 0.201 | 94.11% |
-| 11 (stochastic) | 0.327 | 94.11% |
-| 12 | 0.225 | 94.05% |
-| 12 (stochastic) | 0.343 | 94.05% |
+| 11 | 0.158 | 94.11% |
+| 11 (stochastic) | 0.272 | 94.11% |
+| 12 | 0.183 | 94.05% |
+| 12 (stochastic) | 0.305 | 94.11% |
 
 The custom CUDA tiled matrix multiplication slightly outperforms cuBLAS under these conditions.
 
@@ -152,7 +152,7 @@ Key implementation aspects include:
 - manual forward and backward propagation
 - custom tensor abstraction
 - kernel-based softmax and loss computation
-- merged bias update kernel
+- reuse cache address in kernel
 - pluggable backend design via operator table
 
 The project is designed to make it easy to compare performance between different implementations.

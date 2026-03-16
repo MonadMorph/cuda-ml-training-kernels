@@ -1,4 +1,4 @@
-CC = gcc-15
+CC = gcc
 NVCC = nvcc
 PKG_CONFIG ?= pkg-config
 
@@ -12,8 +12,8 @@ OPENBLAS_LDFLAGS := $(shell PKG_CONFIG_PATH="$(shell brew --prefix openblas 2>/d
 CFLAGS = -Wall -Wextra -O3 -fopenmp -ffast-math -Iinclude $(OPENBLAS_CFLAGS)
 NVFLAGS = -O3 --use_fast_math -Iinclude
 # -fopenmp is required at link time on GCC to pull in libgomp
-LDFLAGS = $(OPENBLAS_LDFLAGS) -fopenmp
-CUDA_LDFLAGS = -lcublas
+LDFLAGS = $(OPENBLAS_LDFLAGS) -lm
+CUDA_LDFLAGS = -lcublas -lgomp
 CUDA_ARCH = -gencode arch=compute_89,code=sm_89 # Try to use 4090
 
 C_SRCS_BASE := $(filter-out src/cpu/util.c, $(wildcard src/cpu/*.c))
@@ -29,7 +29,7 @@ test: $(C_OBJS_BASE) $(CU_OBJS_BASE) $(UTIL_CU_OBJ)
 	$(NVCC) $(CUDA_ARCH) -Xcompiler="-fopenmp" $^ $(LDFLAGS) $(CUDA_LDFLAGS) -o test
 
 cpu: $(C_OBJS_BASE) $(UTIL_C_OBJ)
-	$(CC) $^ $(LDFLAGS) -o test
+	$(CC) $^ $(LDFLAGS) -fopenmp -o test
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
