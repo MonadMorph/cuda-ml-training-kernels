@@ -5,7 +5,7 @@
 
 static int read_be_u32(FILE *f){
     unsigned char b[4];
-    fread(b, 1, 4, f);
+    (void)fread(b, 1, 4, f);
     return (b[0] << 24) | (b[1] << 16) | (b[2] <<  8) | b[3];
 }
 
@@ -24,7 +24,7 @@ static int load_mnist_images(const char *path, float **X, int *N) {
 
     float *images = (float*) malloc(n * 784 * sizeof(float));
     unsigned char *buf = (unsigned char*) malloc(n * 784);
-    fread(buf, 1, n * 784, f);
+    (void)fread(buf, 1, n * 784, f);
     fclose(f);
 
     for (int i = 0; i < n * 784; ++i)
@@ -42,7 +42,7 @@ static int load_mnist_labels(const char *path, int **y, int *N) {
     int n = read_be_u32(f);
 
     unsigned char *buf = (unsigned char *) malloc(n);
-    fread(buf, 1, n, f);
+    (void)fread(buf, 1, n, f);
     fclose(f);
 
     int *labels = (int *) malloc(n * sizeof(int));
@@ -72,10 +72,19 @@ void free_mnist_set(MNISTSet *set) {
     free(set->y);
 }
 
+static int initialized = 0;
+static float* data;
+
 void prep_dataset_cpu(MNISTSet* dataset, int shuffle) {
     if (shuffle == 0) {
         dataset->y_rand = dataset->y;    
         return;
+    }
+
+    if (!initialized) {
+        size_t batch_size_byte = sizeof(float) * dataset->batch_size * dataset->data_size;
+        data = (float*) malloc(batch_size_byte);
+        initialized = 1;
     }
 
     free(dataset->position);
@@ -87,12 +96,32 @@ void prep_dataset_cpu(MNISTSet* dataset, int shuffle) {
     }
 }
 
+// This is not used, just to maintain api consistency
+void fetch_data_cpu(Tensor* batch, MNISTSet dataset, int start) {
+    (void) batch;
+    (void) dataset;
+    (void) start;
+    return ; 
+}
+
 void pack_batch_data_cpu(Tensor* batch, MNISTSet dataset, int start) {
-    float* batch_data = batch->data;
     int stride = dataset.data_size;
     int batch_size = batch->shape[0];
 
     for (int i = 0; i < batch_size; i++) {
-        memcpy(batch_data + i * stride, dataset.X + dataset.position[i+start] * stride, stride * sizeof(float));
+        memcpy(data + i * stride, dataset.X + dataset.position[i+start] * stride, stride * sizeof(float));
     }
+
+    batch->data = data;
+}
+
+void destory_data_cpu(MNISTSet dataset) {
+    if (initialized) {
+        free(data);
+        initialized = 0;
+    }
+
+    free(dataset.X);
+    free(dataset.y);
+    if (dataset.position) free(dataset.position);
 }

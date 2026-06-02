@@ -19,9 +19,9 @@ float GetTimer(){
 
 Mat_Operators mat_op;
 Tensor_Ops t_op;
-void (*prep_dataset) (MNISTSet* dataset, int shuffle) = NULL;
-void (*pack_batch_data) (Tensor* batch, MNISTSet dataset, int start) = NULL;
-int (*greedy_accuracy) (Tensor probs, int* gt) = NULL;
+Dataset_Operators data_ops;
+void (*greedy_accuracy) (Tensor probs, int* gt) = NULL;
+int (*get_accuracy) (void) = NULL;
 
 int roll_dice(Tensor probs, int* gt) {
     int num_correct = 0;
@@ -41,10 +41,18 @@ int roll_dice(Tensor probs, int* gt) {
     return num_correct;
 }
 
-int greedy_accuracy_cpu(Tensor probs, int* gt) {
+static int acc_initialized = 0;
+static int agg_acc;
+
+void greedy_accuracy_cpu(Tensor probs, int* gt) {
     int num_correct = 0;
     int batch_size = probs.shape[0];
     int prob_space = probs.shape[1];
+
+    if (!acc_initialized) {
+        agg_acc = 0;
+        acc_initialized = 1;
+    }
 
     for (int i = 0; i < batch_size; i++) {
         float max = 0.0f; int argmax = 0;
@@ -56,7 +64,12 @@ int greedy_accuracy_cpu(Tensor probs, int* gt) {
         }
         if (argmax == gt[i]) num_correct++;
     }
-    return num_correct;
+    agg_acc += num_correct;
+}
+
+int get_accuracy_cpu(void) {
+    acc_initialized = 0;
+    return agg_acc;
 }
 
 void print_tensor(Tensor t) {
@@ -108,6 +121,9 @@ void set_global_operators(int which) {
             break;
     }
 
+    mat_op.destory_weight_sync = destory_weight_sync_cpu;
+    t_op.destory_bias_sync = destory_bias_sync_cpu;
+
     t_op.kaimin_init_tensor = kaimin_init_tensor;
     t_op.zero_init_tensor = zero_init_tensor;
     t_op.init_tensor = init_tensor;
@@ -119,8 +135,12 @@ void set_global_operators(int which) {
     t_op.update_bias = update_bias;
     t_op.merged_update_bias = merged_update_bias;
     t_op.cross_entropy_loss = cross_entropy_loss;
+    t_op.get_loss = get_loss_cpu;
 
-    prep_dataset = prep_dataset_cpu;
-    pack_batch_data = pack_batch_data_cpu;
+    data_ops.prep_dataset = prep_dataset_cpu;
+    data_ops.pack_batch_data = pack_batch_data_cpu;
+    data_ops.fetch_data = fetch_data_cpu;
+    data_ops.destory_data = destory_data_cpu;
     greedy_accuracy = greedy_accuracy_cpu;
+    get_accuracy = get_accuracy_cpu;
 }

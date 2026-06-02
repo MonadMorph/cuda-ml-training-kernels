@@ -4,8 +4,6 @@
 
 // output = input*weight + bias (relu)
 void linear_layer_forward(Tensor input, Tensor weight, Tensor bias, Tensor* output, int do_relu) {
-
-    int input_transposed = 0, weight_transposed = 1;
     
     int out_stride = output->shape[1];
     int in_stride = input.shape[1];
@@ -32,7 +30,6 @@ void linear_layer_forward(Tensor input, Tensor weight, Tensor bias, Tensor* outp
 }
 
 void relu_layer_backward(Tensor input, Tensor weight, Tensor cur_logits, Tensor* output) {
-    int input_transposed = 0, weight_transposed = 0;
     
     int out_stride = output->shape[1];
     int in_stride = input.shape[1];
@@ -89,4 +86,9 @@ void update_weight(Tensor input, Tensor weight, float lr, Tensor* output) {
         // printf("%f\n", acc);
         output->data[i*out_stride + j] -= factor * acc;
     }
+}
+
+// This is not used for CPU
+void destory_weight_sync_cpu(void) {
+    return ;
 }

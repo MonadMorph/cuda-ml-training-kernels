@@ -1,12 +1,28 @@
 #include "tensor.h"
 #include <math.h>
+#include <stdio.h>
 #include <cuda_runtime.h>
+
+#define CHECK(call)                                                    \
+{                                                                           \
+   const cudaError_t error = call;                                          \
+   if (error != cudaSuccess)                                                \
+   {                                                                        \
+       printf("Error: %s:%d, ", __FILE__, __LINE__);                        \
+       printf("code:%d, reason: %s\n", error, cudaGetErrorString(error));   \
+       exit(1);                                                             \
+   }                                                                        \
+}
+
+static int initialized = 0;
+static cudaStream_t bias_stream;
 
 // In place softmax
 __global__ static void softmax_d(float* data, int shape0, int shape1) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
     int total_threads = blockDim.x * gridDim.x;
 
+    // No reduction for now: only 10 outputs
     for (int i = thread_id; i < shape0; i += total_threads) {
         float max = data[i*shape1];
         for (int j = 1; j < shape1; j++) {
@@ -30,6 +46,7 @@ void softmax_cuda(Tensor* logits) {
     blocks = (task_size + tpb - 1) / tpb;
 
     softmax_d<<<blocks, tpb>>>(logits->data, task_size, logits->shape[1]);
+    CHECK(cudaGetLastError());
 }
 
 __global__ static void softmax_backward_d(float* data, int batch_size, int prob_space, int* gt) {
@@ -49,6 +66,7 @@ void softmax_backward_cuda(Tensor* error, int* gt) {    // gt need to be on devi
     blocks = (task_size + tpb - 1) / tpb;
 
     softmax_backward_d<<<blocks, tpb>>>(error->data, task_size, error->shape[1], gt); 
+    CHECK(cudaGetLastError());
 }
 
 __global__ static void update_bias_d(float* bias_data, int param_size, float* error_data, int batch_size, float factor) {
@@ -65,6 +83,11 @@ __global__ static void update_bias_d(float* bias_data, int param_size, float* er
 }
 
 void update_bias_cuda(Tensor error, float lr, Tensor* bias) {
+    if (!initialized) {
+        CHECK(cudaStreamCreate(&bias_stream));
+        initialized = 1;
+    }
+
     int tpb, blocks;
     int task_size = bias->shape[1];
     tpb = task_size >= 256 ? 256 : 32;
@@ -73,7 +96,8 @@ void update_bias_cuda(Tensor error, float lr, Tensor* bias) {
     int batch_size = error.shape[0];
     float factor = lr / batch_size;
 
-    update_bias_d<<<blocks, tpb>>>(bias->data, task_size, error.data, batch_size, factor);
+    update_bias_d<<<blocks, tpb, 0, bias_stream>>>(bias->data, task_size, error.data, batch_size, factor);
+    CHECK(cudaGetLastError());
 }
 
 __global__ static void merged_update_bias_d(float* bias_data, float* D1_data, int b1_size, float* D2_data, int b2_size, float* D3_data, int b3_size, int batch_size, float factor) {
@@ -112,6 +136,10 @@ __global__ static void merged_update_bias_d(float* bias_data, float* D1_data, in
 }
 
 void merged_update_bias_cuda(Tensor D1, Tensor D2, Tensor D3, float lr, Tensor* bias) {
+    if (!initialized) {
+        CHECK(cudaStreamCreate(&bias_stream));
+        initialized = 1;
+    }
 
     int batch_size = D1.shape[0];
     int b1_size = D1.shape[1];
@@ -124,34 +152,63 @@ void merged_update_bias_cuda(Tensor D1, Tensor D2, Tensor D3, float lr, Tensor* 
     tpb = task_size >= 256 ? 256 : 32;
     blocks = (task_size + tpb - 1) / tpb;
 
-    merged_update_bias_d<<<blocks, tpb>>>(bias->data, D1.data, b1_size, D2.data, b2_size, D3.data, b3_size, batch_size, factor);
+    merged_update_bias_d<<<blocks, tpb, 0, bias_stream>>>(bias->data, D1.data, b1_size, D2.data, b2_size, D3.data, b3_size, batch_size, factor);
+    CHECK(cudaGetLastError());
 }
+
+static int loss_initialized = 0;
+static float* agg_loss_d;
 
 __global__ static void cross_entropy_loss_d(float* data, int batch_size, int param_size, int* gt, float* loss_d) {
     int thread_id = blockIdx.x * blockDim.x + threadIdx.x;
-    int total_threads = blockDim.x * gridDim.x;
+    int tid = threadIdx.x;
 
-    for (int i = thread_id; i < batch_size; i += total_threads) {
-        atomicAdd(loss_d, -logf(data[i * param_size + gt[i]]));
+    extern __shared__ float smem[];
+
+    float loss = 0;
+    if (thread_id < batch_size) loss = -logf(data[thread_id * param_size + gt[thread_id]]);
+    smem[tid] = loss;
+    __syncthreads();
+
+    // Have to do an actual reduction
+    for(int stride = blockDim.x / 2; stride > 0; stride >>= 1){
+        if (tid < stride) smem[tid] += smem[tid + stride];
+        __syncthreads();
     }
+
+    // write result for this block to global mem
+    if (tid == 0) atomicAdd(loss_d, smem[0]);
 }
 
-float cross_entropy_loss_cuda(Tensor probs, int* gt) {
+void cross_entropy_loss_cuda(Tensor probs, int* gt) {
     int tpb, blocks;
     int task_size = probs.shape[0];
     tpb = task_size >= 256 ? 256 : 32;
     blocks = (task_size + tpb - 1) / tpb;
 
     int param_size = probs.shape[1];
-    float *loss_d; // This is so stupid
-    cudaMalloc(&loss_d, sizeof(float));
-    cudaMemset(loss_d, 0, sizeof(float));
 
-    cross_entropy_loss_d<<<blocks, tpb>>>(probs.data, task_size, param_size, gt, loss_d);
+    if (!loss_initialized) {
+        CHECK(cudaMalloc(&agg_loss_d, sizeof(float)));
+        CHECK(cudaMemset(agg_loss_d, 0, sizeof(float)));
+        loss_initialized = 1;
+    }
 
+    cross_entropy_loss_d<<<blocks, tpb, sizeof(float)*tpb>>>(probs.data, task_size, param_size, gt, agg_loss_d);
+    CHECK(cudaGetLastError());
+}
+
+float get_loss_cuda(void) {
     float loss_h = 0.0f;
-    cudaMemcpy(&loss_h, loss_d, sizeof(float), cudaMemcpyDeviceToHost);
-    cudaFree(loss_d);
+    CHECK(cudaMemcpy(&loss_h, agg_loss_d, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK(cudaFree(agg_loss_d));
+    loss_initialized = 0;
 
     return loss_h;
+}
+
+void destory_bias_sync_cuda(void) {
+    if (initialized) {
+        CHECK(cudaStreamDestroy(bias_stream));
+    }
 }

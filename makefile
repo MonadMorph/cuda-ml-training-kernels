@@ -10,11 +10,11 @@ OPENBLAS_CFLAGS := $(shell PKG_CONFIG_PATH="$(shell brew --prefix openblas 2>/de
 OPENBLAS_LDFLAGS := $(shell PKG_CONFIG_PATH="$(shell brew --prefix openblas 2>/dev/null)/lib/pkgconfig:$(PKG_CONFIG_PATH)" $(PKG_CONFIG) --libs openblas 2>/dev/null)
 
 CFLAGS = -Wall -Wextra -O3 -fopenmp -ffast-math -Iinclude $(OPENBLAS_CFLAGS)
-NVFLAGS = -O3 --use_fast_math -Iinclude
+NVFLAGS = -O3 --use_fast_math -Iinclude -ccbin $(CC)
 # -fopenmp is required at link time on GCC to pull in libgomp
 LDFLAGS = $(OPENBLAS_LDFLAGS) -lm
 CUDA_LDFLAGS = -lcublas -lgomp
-CUDA_ARCH = -gencode arch=compute_89,code=sm_89 # Try to use 4090
+CUDA_ARCH = -arch=native
 
 C_SRCS_BASE := $(filter-out src/cpu/util.c, $(wildcard src/cpu/*.c))
 CU_SRCS_BASE := $(filter-out src/cuda/util.cu, $(wildcard src/cuda/*.cu))

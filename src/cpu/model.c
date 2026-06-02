@@ -98,37 +98,36 @@ static void model_backward(Model *m, Cache cache, int* gt, float lr) {
 }
 
 float train_one_epoch(Model*m, MNISTSet dataset, float lr, int batch_size, int stochastic) {
-    float loss = 0;
     Cache cache = (Cache) {.initialized = 0};
+    Tensor A0 = (Tensor){.ndim = 2, .shape = {batch_size, dataset.data_size}, .size = batch_size * dataset.data_size};
+    if (stochastic) data_ops.fetch_data(&A0, dataset, 0);
 
     for (int i = 0; i < dataset.N; i += batch_size) {
         // Pack dataset into tensor, starting from i
         int batch = (i + batch_size < dataset.N) ? batch_size : (dataset.N - i);
+        Tensor A0 = (Tensor){.ndim = 2, .shape = {batch, dataset.data_size}, .size = batch * dataset.data_size};
         
-        Tensor A0;
         if (stochastic) {
-            A0 = (Tensor){.ndim = 2, .shape = {batch, dataset.data_size}, .size = batch * dataset.data_size};
-            t_op.init_tensor(&A0);
-            pack_batch_data(&A0, dataset, i);
-        } else {
-            A0 = (Tensor){.ndim = 2, .shape = {batch, dataset.data_size}, .size = batch * dataset.data_size};
-            A0.data = dataset.X + i*dataset.data_size;
-        }
+            data_ops.pack_batch_data(&A0, dataset, i); // retrieve data from current batch
+            int next_i = i + batch_size; // (async) fetch data for next batch
+            if (next_i < dataset.N) {
+                int next_batch = (next_i + batch_size < dataset.N) ? batch_size : (dataset.N - next_i);
+                Tensor next_A0 = (Tensor){.ndim = 2, .shape = {next_batch, dataset.data_size}, .size = next_batch * dataset.data_size};
+                data_ops.fetch_data(&next_A0, dataset, next_i);
+            }
+        } else A0.data = dataset.X + i*dataset.data_size; // directly get batch i data
 
         init_cache(&cache, batch, A0);
         model_forward(m, &cache);
-        loss += t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
+        t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
         model_backward(m, cache, dataset.y_rand + i, lr);
-        if (stochastic) t_op.free_tensor(&A0);
     }
 
     free_cache(&cache);
-    return loss / dataset.N;
+    return t_op.get_loss() / dataset.N;
 }
 
 float accuracy_testing(Model*m, MNISTSet dataset, int batch_size, float* testing_loss) {
-    int total_num_correct = 0;
-    *testing_loss = 0;
     Cache cache = (Cache) {.initialized = 0};
 
     for (int i = 0; i < dataset.N; i += batch_size) {
@@ -140,11 +139,22 @@ float accuracy_testing(Model*m, MNISTSet dataset, int batch_size, float* testing
         init_cache(&cache, batch, A0);
 
         model_forward(m, &cache);
-        total_num_correct += greedy_accuracy(cache.P, dataset.y_rand + i);
-        *testing_loss += t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
+        greedy_accuracy(cache.P, dataset.y_rand + i);
+        t_op.cross_entropy_loss(cache.P, dataset.y_rand + i);
     }
 
     free_cache(&cache);
+    *testing_loss = t_op.get_loss();
     *testing_loss /= (float) dataset.N;
-    return (float) total_num_correct / (float) dataset.N;
+    return (float) get_accuracy() / (float) dataset.N;
+}
+
+void destory_model(Model m) {
+    t_op.free_tensor(&m.W1);
+    t_op.free_tensor(&m.b1);
+    t_op.free_tensor(&m.W2);
+    t_op.free_tensor(&m.W3);
+
+    mat_op.destory_weight_sync();
+    t_op.destory_bias_sync();
 }

@@ -1,8 +1,19 @@
 #include "tensor.h"
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <cuda_runtime.h>
 
+#define CHECK(call)                                                    \
+{                                                                           \
+   const cudaError_t error = call;                                          \
+   if (error != cudaSuccess)                                                \
+   {                                                                        \
+       printf("Error: %s:%d, ", __FILE__, __LINE__);                        \
+       printf("code:%d, reason: %s\n", error, cudaGetErrorString(error));   \
+       exit(1);                                                             \
+   }                                                                        \
+}
 
 void kaimin_init_tensor_cuda(Tensor* tensor) {
     int size = tensor->size;
@@ -15,20 +26,20 @@ void kaimin_init_tensor_cuda(Tensor* tensor) {
         data_h[i] = 2 * rand_bound * rand() / (RAND_MAX + 1.0)  - rand_bound;
     }
 
-    cudaMalloc(&tensor->data, size * sizeof(float));
-    cudaMemcpy(tensor->data, data_h, size * sizeof(float), cudaMemcpyHostToDevice);
+    CHECK(cudaMalloc(&tensor->data, size * sizeof(float)));
+    CHECK(cudaMemcpy(tensor->data, data_h, size * sizeof(float), cudaMemcpyHostToDevice));
     free(data_h);
 }
 
 void zero_init_tensor_cuda(Tensor* tensor) {
     int size = tensor->size;
-    cudaMalloc(&tensor->data, size * sizeof(float));
-    cudaMemset(tensor->data, 0, size * sizeof(float));
+    CHECK(cudaMalloc(&tensor->data, size * sizeof(float)));
+    CHECK(cudaMemset(tensor->data, 0, size * sizeof(float)));
 }
 
 void init_tensor_cuda(Tensor* tensor) {
     int size = tensor->size;
-    cudaMalloc(&tensor->data, size * sizeof(float));
+    CHECK(cudaMalloc(&tensor->data, size * sizeof(float)));
 }
 
 __global__ void init_tensor_from_d(float* tensor_data, int tensor_size, float* basis_data, int basis_size) {
@@ -42,7 +53,7 @@ __global__ void init_tensor_from_d(float* tensor_data, int tensor_size, float* b
 
 void init_tensor_from_cuda(Tensor* tensor, Tensor basis) {
     int size = tensor->size;
-    cudaMalloc(&tensor->data, size * sizeof(float));
+    CHECK(cudaMalloc(&tensor->data, size * sizeof(float)));
     
     int tpb, blocks;
     tpb = size >= 256 ? 256 : 32;
@@ -52,5 +63,5 @@ void init_tensor_from_cuda(Tensor* tensor, Tensor basis) {
 }
 
 void free_tensor_cuda(Tensor* tensor) {
-    cudaFree(tensor->data);
+    CHECK(cudaFree(tensor->data));
 }

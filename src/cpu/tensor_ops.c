@@ -1,4 +1,3 @@
-#include "main.h"
 #include "tensor.h"
 #include <math.h>
 
@@ -84,7 +83,15 @@ void merged_update_bias(Tensor D1, Tensor D2, Tensor D3, float lr, Tensor* bias)
     }
 }
 
-float cross_entropy_loss(Tensor probs, int* gt) {
+static int loss_initialized = 0;
+static float agg_loss;
+
+void cross_entropy_loss(Tensor probs, int* gt) {
+    if (!loss_initialized) {
+        agg_loss = 0;
+        loss_initialized = 1;
+    }
+
     float loss = 0;
     int stride = probs.shape[1];
     int batch_size = probs.shape[0];
@@ -93,5 +100,15 @@ float cross_entropy_loss(Tensor probs, int* gt) {
     for (int i = 0; i < batch_size; i ++) {
         loss -= log(probs.data[i * stride + gt[i]]);
     }
-    return loss;
+    agg_loss += loss;
+}
+
+float get_loss_cpu(void) {
+    loss_initialized = 0;
+    return agg_loss;
+}
+
+// This is not used in CPU mode
+void destory_bias_sync_cpu(void) {
+    return;
 }

@@ -3,6 +3,28 @@
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
 
+#define NUM_STREAMS 3
+#define CHECK(call)                                                    \
+{                                                                           \
+   const cudaError_t error = call;                                          \
+   if (error != cudaSuccess)                                                \
+   {                                                                        \
+       printf("Error: %s:%d, ", __FILE__, __LINE__);                        \
+       printf("code:%d, reason: %s\n", error, cudaGetErrorString(error));   \
+       exit(1);                                                             \
+   }                                                                        \
+}
+
+#define CHECK_CUBLAS(call)                                      \
+{                                                               \
+    const cublasStatus_t status = call;                         \
+    if (status != CUBLAS_STATUS_SUCCESS) {                      \
+        printf("cuBLAS Error: %s:%d, code:%d\n",                \
+               __FILE__, __LINE__, status);                     \
+        exit(1);                                                \
+    }                                                           \
+}
+
 /*cublasSgemm(handle, transa, transb, I, J, K,
             &alpha,
             A, lda,
@@ -10,16 +32,26 @@
             &beta,
             C, ldc);*/
 
-static cublasHandle_t handle;
-static int handle_ready = 0;
+typedef struct {
+    int initialized;
+    int work_on;
+    cublasHandle_t null_handle;
+    cudaStream_t weight_streams[NUM_STREAMS];
+    cublasHandle_t w_handles[NUM_STREAMS];
+} Cublas_handles;
 
-static void inline ensure_cublas_handle(void) {
-    if (!handle_ready) {
-        cublasStatus_t stat = cublasCreate(&handle);
-        if (stat != CUBLAS_STATUS_SUCCESS) {
-            printf("cublasCreate failed\n");
+static Cublas_handles handles = (Cublas_handles) {.initialized = 0};
+
+static void inline init_handles(void) {
+    if (!handles.initialized) {
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            CHECK(cudaStreamCreate(&handles.weight_streams[i]));
+            CHECK_CUBLAS(cublasCreate(&handles.w_handles[i]));
+            CHECK_CUBLAS(cublasSetStream(handles.w_handles[i], handles.weight_streams[i]));
         }
-        handle_ready = 1;
+        CHECK_CUBLAS(cublasCreate(&handles.null_handle));
+        handles.initialized = 1;
+        handles.work_on = 0;
     }
 }
 
@@ -47,16 +79,11 @@ void linear_layer_forward_cublas (Tensor input, Tensor weight, Tensor bias, Tens
     float alpha = 1.0f;
     float beta  = 0.0f;
 
-    ensure_cublas_handle();
-    cublasStatus_t stat = cublasSgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, J, I, K,
+    init_handles();
+    CHECK_CUBLAS(cublasSgemm(handles.null_handle, CUBLAS_OP_T, CUBLAS_OP_N, J, I, K,
         &alpha, weight.data, weight_stride,
         input.data,  in_stride,
-        &beta, output->data, out_stride);
-
-    // To be removed
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf("cublasSgemm failed in linear_layer_forward_cublas\n");
-    }
+        &beta, output->data, out_stride));
 
     // Separate kernel for bias + optional relu
     int tpb = 256;
@@ -87,15 +114,11 @@ void relu_layer_backward_cublas(Tensor input, Tensor weight, Tensor cur_logits, 
     float alpha = 1.0f;
     float beta  = 0.0f;
 
-    ensure_cublas_handle();
-    cublasStatus_t stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, J, I, K,
+    init_handles();
+    CHECK_CUBLAS(cublasSgemm(handles.null_handle, CUBLAS_OP_N, CUBLAS_OP_N, J, I, K,
         &alpha, weight.data, weight_stride,
         input.data,  in_stride,
-        &beta, output->data, out_stride);
-
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf("cublasSgemm failed in relu_layer_backward_cublas\n");
-    }
+        &beta, output->data, out_stride));
 
     // Separate kernel for relu derivative
     int tpb = 256;
@@ -118,13 +141,22 @@ void update_weight_cublas(Tensor input, Tensor weight, float lr, Tensor* output)
     float alpha = -lr / K;
     float beta  = 1.0f;
 
-    ensure_cublas_handle();
-    cublasStatus_t stat = cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_T, J, I, K,
+    init_handles();
+    int work_on = handles.work_on;
+    handles.work_on = (work_on + 1) % NUM_STREAMS;
+    CHECK_CUBLAS(cublasSgemm(handles.w_handles[work_on], CUBLAS_OP_N, CUBLAS_OP_T, J, I, K,
         &alpha, weight.data, weight_stride,
         input.data,  in_stride,
-        &beta, output->data, out_stride);
+        &beta, output->data, out_stride));
+}
 
-    if (stat != CUBLAS_STATUS_SUCCESS) {
-        printf("cublasSgemm failed in update_weight_cublas\n");
+void destory_weight_sync_cublas (void) {
+    if (handles.initialized) {
+        for (int i = 0; i < NUM_STREAMS; i++) {
+            CHECK_CUBLAS(cublasDestroy(handles.w_handles[i]));
+            CHECK(cudaStreamDestroy(handles.weight_streams[i]));
+        }
+        CHECK_CUBLAS(cublasDestroy(handles.null_handle));
+        handles.initialized = 0;
     }
 }
