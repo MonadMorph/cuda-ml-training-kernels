@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc-15
 NVCC = nvcc
 PKG_CONFIG ?= pkg-config
 

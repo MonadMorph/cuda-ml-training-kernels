@@ -17,7 +17,6 @@ The goal of the project is to explore low-level performance engineering in machi
 - CPU and GPU implementations
 - Custom tiled CUDA kernels
 - cuBLAS implementation
-- MNIST training and evaluation
 - Benchmark comparison across implementations
 
 ---
@@ -127,18 +126,18 @@ Default parameters:
 
 | Mode | Time (s) | Accuracy |
 |-----|--------|--------|
-| 0 | 7.23 | 93.67% |
-| 1 | 3.60 | 93.65% |
-| 2 | 1.14 | 93.60% |
+| 0 | 7.18 | 93.67% |
+| 1 | 3.54 | 93.65% |
+| 2 | 1.11 | 93.60% |
 
 ## GPU (RTX 4090)
 
 | Mode | Time (s) | Accuracy |
 |-----|--------|--------|
-| 11 | 0.158 | 94.11% |
-| 11 (stochastic) | 0.272 | 94.11% |
-| 12 | 0.183 | 94.05% |
-| 12 (stochastic) | 0.305 | 94.11% |
+| 11 | 0.112 | 94.11% |
+| 11 (stochastic) | 0.125 | 94.11% |
+| 12 | 0.153 | 94.05% |
+| 12 (stochastic) | 0.202 | 94.11% |
 
 The custom CUDA tiled matrix multiplication slightly outperforms cuBLAS under these conditions.
 
@@ -149,11 +148,13 @@ The custom CUDA tiled matrix multiplication slightly outperforms cuBLAS under th
 Key implementation aspects include:
 
 - tiled shared-memory CUDA matrix multiplication
-- manual forward and backward propagation
 - custom tensor abstraction
-- kernel-based softmax and loss computation
+- softmax and loss reduction kernels
 - reuse cache address in kernel
 - pluggable backend design via operator table
+- CUDA stream-based asynchronous data transfer
+- CUDA stream-based parallel parameter updates
+- Pinned host memory buffers
 
 The project is designed to make it easy to compare performance between different implementations.
 
@@ -166,6 +167,7 @@ This project was developed as part of a high-performance computing course to exp
 - GPU programming
 - CUDA kernel optimization
 - BLAS libraries
+- CUDA stream synchronizations
 - performance bottlenecks in ML training systems
 
 It also serves as a learning exercise in building machine learning infrastructure from first principles.
